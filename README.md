@@ -36,6 +36,275 @@ An AI-powered code review system specialized for PostgreSQL analysis, using RAG-
 └─────────────────┘     └─────────────────┘
 ```
 
+## Quick Start
+
+### Option 1: Docker Compose (Recommended)
+
+The fastest way to get started with all dependencies:
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd code-reviewer
+
+# Start all services (Temporal, Ollama, PostgreSQL)
+make compose-up
+
+# Pull required LLM models (first time only)
+make ollama-pull
+
+# View logs
+make compose-logs
+```
+
+Access the services:
+- **Temporal UI**: http://localhost:8088
+- **Application**: http://localhost:8080
+- **Metrics**: http://localhost:9090/metrics
+
+### Option 2: Local Development
+
+```bash
+# Install dependencies
+make deps
+
+# Build the binary
+make build
+
+# Run locally (requires Temporal and Ollama running)
+make run-dev
+```
+
+### Option 3: Kubernetes with Helm
+
+```bash
+# Install the Helm chart
+make helm-install
+
+# Or with custom values
+helm install code-reviewer ./charts/code-reviewer \
+  --namespace code-reviewer \
+  --create-namespace \
+  --set config.gitlab.enabled=true \
+  --set secrets.gitlabToken=glpat-xxx
+```
+
+## Deployment Options
+
+### Docker Compose
+
+The `docker-compose.yml` provides a complete local development environment:
+
+| Service | Port | Description |
+|---------|------|-------------|
+| `code-reviewer` | 8080, 9090 | Main application (HTTP + metrics) |
+| `temporal` | 7233 | Temporal workflow server |
+| `temporal-db` | 5432 | PostgreSQL for Temporal |
+| `temporal-ui` | 8088 | Temporal Web UI |
+| `ollama` | 11434 | LLM server (GPU enabled) |
+
+**Optional profiles:**
+
+```bash
+# Start with observability stack (Jaeger, Prometheus, Grafana)
+make compose-up-full
+# Or: docker-compose --profile observability up -d
+
+# Start with Milvus vector database
+docker-compose --profile milvus up -d
+```
+
+**Observability services (with `--profile observability`):**
+
+| Service | Port | Description |
+|---------|------|-------------|
+| `jaeger` | 16686, 4317 | Distributed tracing UI + OTLP |
+| `prometheus` | 9091 | Metrics collection |
+| `grafana` | 3000 | Dashboards (admin/admin) |
+
+**Common commands:**
+
+```bash
+# Start services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f code-reviewer
+
+# Stop services
+docker-compose down
+
+# Stop and remove volumes
+docker-compose down -v
+
+# Rebuild after code changes
+docker-compose up -d --build
+```
+
+### Docker
+
+Build and run the container directly:
+
+```bash
+# Build the image
+make docker-build
+
+# Run the container
+docker run -p 8080:8080 -p 9090:9090 \
+  -e TEMPORAL_HOST=host.docker.internal:7233 \
+  -e LLM_BASE_URL=http://host.docker.internal:11434 \
+  yourorg/code-reviewer:latest
+```
+
+**Dockerfile features:**
+- Multi-stage build for minimal image size (~50MB)
+- Non-root user for security
+- Built-in health checks
+- Alpine-based runtime
+
+### Helm Chart
+
+The Helm chart (`charts/code-reviewer/`) provides production-grade Kubernetes deployment:
+
+**Features:**
+- Horizontal Pod Autoscaler (2-10 replicas)
+- Pod Disruption Budget for high availability
+- Pod anti-affinity for distribution
+- Persistent volume for vector store
+- ServiceMonitor for Prometheus Operator
+- External Secrets support (Vault, AWS SM)
+- Ingress configuration
+- Resource limits and requests
+
+**Installation:**
+
+```bash
+# Lint the chart
+make helm-lint
+
+# Dry run to see what will be created
+make helm-install-dry-run
+
+# Install
+make helm-install
+
+# Upgrade after changes
+make helm-upgrade
+
+# Uninstall
+make helm-uninstall
+```
+
+**Custom values example:**
+
+```yaml
+# values-production.yaml
+replicaCount: 3
+
+config:
+  environment: production
+  gitlab:
+    enabled: true
+  tracing:
+    enabled: true
+    endpoint: jaeger-collector:4317
+
+secrets:
+  gitlabToken: glpat-xxxxx
+
+resources:
+  limits:
+    cpu: 4000m
+    memory: 8Gi
+  requests:
+    cpu: 1000m
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+```
+
+```bash
+helm install code-reviewer ./charts/code-reviewer \
+  -f values-production.yaml \
+  --namespace code-reviewer
+```
+
+## Makefile Commands
+
+The Makefile provides shortcuts for common operations:
+
+### Build & Run
+
+| Command | Description |
+|---------|-------------|
+| `make build` | Build all binaries |
+| `make build-linux` | Cross-compile for Linux |
+| `make run` | Build and run locally |
+| `make run-dev` | Run with debug logging |
+| `make clean` | Remove build artifacts |
+
+### Testing
+
+| Command | Description |
+|---------|-------------|
+| `make test` | Run all tests |
+| `make test-short` | Run short tests only |
+| `make test-verbose` | Run with verbose output |
+| `make coverage` | Generate coverage report |
+| `make coverage-report` | Open coverage in browser |
+
+### Code Quality
+
+| Command | Description |
+|---------|-------------|
+| `make lint` | Run golangci-lint |
+| `make fmt` | Format code |
+| `make vet` | Run go vet |
+
+### Docker
+
+| Command | Description |
+|---------|-------------|
+| `make docker-build` | Build Docker image |
+| `make docker-push` | Push to registry |
+| `make docker-run` | Run container locally |
+
+### Docker Compose
+
+| Command | Description |
+|---------|-------------|
+| `make compose-up` | Start all services |
+| `make compose-up-build` | Rebuild and start |
+| `make compose-up-full` | Start with observability |
+| `make compose-down` | Stop services |
+| `make compose-logs` | Follow logs |
+| `make compose-ps` | Show running services |
+| `make ollama-pull` | Pull LLM models |
+
+### Helm
+
+| Command | Description |
+|---------|-------------|
+| `make helm-lint` | Lint chart |
+| `make helm-template` | Render templates |
+| `make helm-install` | Install chart |
+| `make helm-upgrade` | Upgrade release |
+| `make helm-uninstall` | Remove release |
+| `make helm-package` | Package chart |
+
+### CI/CD
+
+| Command | Description |
+|---------|-------------|
+| `make ci` | Run CI pipeline (lint, test, build) |
+| `make ci-full` | Full CI with Docker and Helm |
+| `make install-tools` | Install dev tools |
+
+Run `make help` to see all available commands.
+
 ## Components
 
 | Component | Description |
@@ -52,96 +321,6 @@ An AI-powered code review system specialized for PostgreSQL analysis, using RAG-
 | `internal/config` | Centralized configuration management |
 | `internal/errors` | Error handling with circuit breaker and retry |
 | `internal/atomicfile` | Atomic file operations for data integrity |
-
-## Prerequisites
-
-- **Go 1.21+**
-- **Temporal Server** (for workflow orchestration)
-- **Ollama** or **OpenAI API** (for LLM inference)
-
-### Install Ollama
-
-```bash
-# Install Ollama (https://ollama.ai)
-curl -fsSL https://ollama.ai/install.sh | sh
-
-# Pull recommended models
-ollama pull qwen2.5-coder:32b      # For code analysis
-ollama pull nomic-embed-text        # For embeddings
-```
-
-### Install Temporal
-
-```bash
-# Using Docker Compose (recommended)
-git clone https://github.com/temporalio/docker-compose.git
-cd docker-compose
-docker-compose up -d
-
-# Or using single container
-docker run -d --name temporal \
-  -p 7233:7233 \
-  temporalio/auto-setup:latest
-```
-
-## Installation
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd code-reviewer
-
-# Install dependencies
-go mod download
-
-# Build all binaries
-go build -o bin/ ./cmd/...
-
-# Run tests
-go test ./...
-```
-
-## Quick Start
-
-### 1. Start Infrastructure
-
-```bash
-# Start Temporal
-docker-compose -f docker-compose.temporal.yml up -d
-
-# Start Ollama
-ollama serve
-
-# (Optional) Start Jaeger for tracing
-docker run -d --name jaeger \
-  -p 16686:16686 \
-  -p 4317:4317 \
-  jaegertracing/all-in-one:latest
-```
-
-### 2. Start the Worker
-
-```bash
-# With default configuration
-./bin/postgres-worker
-
-# With custom configuration
-LLM_MODEL=qwen2.5-coder:32b \
-TEMPORAL_HOST=localhost:7233 \
-GITLAB_ENABLED=true \
-GITLAB_TOKEN=your-token \
-./bin/postgres-worker
-```
-
-### 3. Trigger a Review
-
-```bash
-# Via Temporal CLI
-temporal workflow start \
-  --task-queue code-review-queue \
-  --type CodeReviewWorkflow \
-  --input '{"file_path": "path/to/file.go"}'
-```
 
 ## Configuration
 
@@ -384,7 +563,10 @@ Comments will be logged but not posted to GitLab.
 ### Jaeger Setup
 
 ```bash
-# Start Jaeger
+# Using docker-compose
+make compose-up-full
+
+# Or standalone
 docker run -d --name jaeger \
   -p 16686:16686 \
   -p 4317:4317 \
@@ -427,22 +609,33 @@ Shutdown order:
 ```
 .
 ├── cmd/
-│   └── postgres-worker/     # Temporal worker binary
+│   └── postgres-worker/         # Temporal worker binary
 ├── internal/
-│   ├── atomicfile/          # Atomic file operations
-│   ├── config/              # Configuration management
-│   ├── errors/              # Error handling, retry, circuit breaker
-│   ├── gitlab/              # GitLab API client and reviewer
-│   ├── health/              # Health check endpoints
-│   ├── logging/             # Structured logging (slog)
-│   ├── metrics/             # Prometheus metrics
-│   ├── postgres/            # PostgreSQL analyzers
-│   ├── rag/                 # RAG system (chunker, embedder, retriever)
-│   ├── shutdown/            # Graceful shutdown manager
-│   ├── tracing/             # OpenTelemetry integration
-│   └── workflow/            # Temporal workflows/activities
-├── data/                    # Persistent data (vector store, cache)
-└── docs/                    # Additional documentation
+│   ├── atomicfile/              # Atomic file operations
+│   ├── config/                  # Configuration management
+│   ├── errors/                  # Error handling, retry, circuit breaker
+│   ├── gitlab/                  # GitLab API client and reviewer
+│   ├── health/                  # Health check endpoints
+│   ├── logging/                 # Structured logging (slog)
+│   ├── metrics/                 # Prometheus metrics
+│   ├── postgres/                # PostgreSQL analyzers
+│   ├── rag/                     # RAG system (chunker, embedder, retriever)
+│   ├── shutdown/                # Graceful shutdown manager
+│   ├── tracing/                 # OpenTelemetry integration
+│   └── workflow/                # Temporal workflows/activities
+├── charts/
+│   └── code-reviewer/           # Helm chart
+│       ├── Chart.yaml
+│       ├── values.yaml
+│       └── templates/
+├── docker/
+│   ├── grafana/                 # Grafana provisioning
+│   ├── prometheus/              # Prometheus config
+│   └── temporal/                # Temporal dynamic config
+├── Dockerfile                   # Multi-stage Docker build
+├── docker-compose.yml           # Local development environment
+├── Makefile                     # Build and deployment commands
+└── data/                        # Persistent data (vector store, cache)
 ```
 
 ## Dependencies
@@ -469,32 +662,76 @@ Shutdown order:
 
 ## Development
 
+### Prerequisites
+
+```bash
+# Install development tools
+make install-tools
+```
+
 ### Running Tests
 
 ```bash
 # Run all tests
-go test ./...
+make test
 
 # Run with coverage
-go test -cover ./...
+make coverage
 
-# Run specific package tests
-go test ./internal/rag/...
-go test ./internal/postgres/...
-go test ./internal/gitlab/...
+# Open coverage report
+make coverage-report
 ```
 
 ### Building
 
 ```bash
-# Build all binaries
-go build -o bin/ ./cmd/...
+# Build for current platform
+make build
 
-# Build with version info
-go build -ldflags "-X main.Version=1.0.0" -o bin/ ./cmd/...
+# Build for Linux
+make build-linux
+
+# Build Docker image
+make docker-build
+```
+
+### Local Development Workflow
+
+```bash
+# Start dependencies
+make compose-up
+
+# Run the application locally with hot reload
+make run-dev
+
+# Run tests
+make test
+
+# Lint code
+make lint
+
+# Stop everything
+make compose-down
 ```
 
 ## Troubleshooting
+
+### Docker Compose Issues
+
+```bash
+# Check service status
+make compose-ps
+
+# View logs for specific service
+docker-compose logs -f code-reviewer
+
+# Restart a service
+docker-compose restart code-reviewer
+
+# Reset everything
+make compose-down-volumes
+make compose-up
+```
 
 ### LLM Connection Issues
 
@@ -502,15 +739,21 @@ go build -ldflags "-X main.Version=1.0.0" -o bin/ ./cmd/...
 # Check Ollama is running
 curl http://localhost:11434/api/tags
 
-# Test model availability
-ollama run qwen2.5-coder:32b "SELECT 1"
+# Pull models if missing
+make ollama-pull
+
+# Check Ollama logs
+docker-compose logs ollama
 ```
 
 ### Temporal Connection Issues
 
 ```bash
 # Check Temporal is running
-temporal operator namespace list
+docker-compose logs temporal
+
+# Access Temporal UI
+open http://localhost:8088
 
 # Check worker registration
 temporal task-queue describe --task-queue code-review-queue
@@ -519,11 +762,14 @@ temporal task-queue describe --task-queue code-review-queue
 ### Tracing Not Appearing
 
 ```bash
-# Verify collector endpoint
-grpcurl -plaintext localhost:4317 list
+# Ensure observability stack is running
+make compose-up-full
 
-# Check service logs for export errors
-export LOG_LEVEL=debug
+# Check Jaeger UI
+open http://localhost:16686
+
+# Verify tracing is enabled
+echo $TRACING_ENABLED
 ```
 
 ### GitLab API Errors
@@ -535,6 +781,22 @@ curl -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
 
 # Enable dry run to test without posting
 export GITLAB_DRY_RUN=true
+```
+
+### Helm Deployment Issues
+
+```bash
+# Check pod status
+kubectl get pods -n code-reviewer
+
+# View pod logs
+kubectl logs -f deployment/code-reviewer -n code-reviewer
+
+# Describe pod for events
+kubectl describe pod -l app.kubernetes.io/name=code-reviewer -n code-reviewer
+
+# Check Helm release
+make helm-status
 ```
 
 ## License
