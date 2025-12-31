@@ -1,5 +1,6 @@
 # Binaries
 code-reviewer
+code-review-server
 *.exe
 *.exe~
 *.dll
