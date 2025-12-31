@@ -1,0 +1,44 @@
+🎉 Code Reviewer has been deployed!
+
+{{- if .Values.ingress.enabled }}
+1. Access the application at:
+{{- range $host := .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}
+{{- end }}
+{{- else }}
+1. Get the application URL by running:
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "code-reviewer.name" . }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=server" -o jsonpath="{.items[0].metadata.name}")
+  export CONTAINER_PORT=$(kubectl get pod --namespace {{ .Release.Namespace }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
+  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:$CONTAINER_PORT
+  echo "Visit http://127.0.0.1:8080/health to verify"
+{{- end }}
+
+2. Health check:
+  curl http://localhost:8080/health
+
+{{- if .Values.ollama.enabled }}
+
+3. Pull the DeepSeek model (required for first-time setup):
+  kubectl exec -it $(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/component=ollama" -o jsonpath="{.items[0].metadata.name}") -- ollama pull {{ .Values.ollama.model }}
+{{- end }}
+
+4. Test a code review:
+  curl -X POST http://localhost:8080/api/review \
+    -H "Content-Type: application/json" \
+    -d '{"file_path": "test.go", "diff": "+func test() { exec.Command(userInput) }"}'
+
+{{- if and .Values.gitlab.url (or .Values.gitlab.token .Values.gitlab.existingSecret) }}
+
+5. GitLab integration is configured:
+   URL: {{ .Values.gitlab.url }}
+
+   Configure a webhook in your GitLab project:
+   - URL: http://<your-ingress-host>/webhook
+   - Trigger: Merge request events
+{{- else }}
+
+5. GitLab integration is NOT configured.
+   To enable, set gitlab.url and gitlab.token (or gitlab.existingSecret)
+{{- end }}
+
+📚 Documentation: https://github.com/yourorg/code-reviewer

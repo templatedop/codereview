@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "code-reviewer.fullname" . }}-config
+  labels:
+    {{- include "code-reviewer.labels" . | nindent 4 }}
+data:
+  LLM_URL: {{ include "code-reviewer.ollamaUrl" . | quote }}
+  LLM_MODEL: {{ .Values.ollama.model | quote }}
+  TEMPORAL_HOST: {{ include "code-reviewer.temporalHost" . | quote }}
+  TEMPORAL_NAMESPACE: {{ .Values.temporal.namespace | quote }}
+  LOG_LEVEL: {{ .Values.logging.level | quote }}
+  LOG_FORMAT: {{ .Values.logging.format | quote }}
+  LOG_OUTPUT: {{ .Values.logging.output | quote }}
+  {{- if .Values.gitlab.url }}
+  GITLAB_URL: {{ .Values.gitlab.url | quote }}
+  {{- end }}

@@ -1,0 +1,171 @@
+# Default values for code-reviewer
+
+# Number of replicas for each component
+replicaCount:
+  server: 1
+  worker: 1
+
+# Container image configuration
+image:
+  repository: code-reviewer
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Service account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod annotations and labels
+podAnnotations: {}
+podLabels: {}
+
+# Security context for pods
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+# Ollama LLM configuration
+ollama:
+  # Deploy Ollama as part of this chart
+  enabled: true
+  # Model to use for code review
+  model: "deepseek-coder:6.7b"
+  # External Ollama URL (if enabled=false)
+  externalUrl: ""
+  # Resource configuration for Ollama
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 8Gi
+  # Persistence for model storage
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+
+# GitLab integration
+gitlab:
+  # GitLab server URL
+  url: ""
+  # GitLab API token (use existingSecret for production)
+  token: ""
+  # Name of existing secret containing GitLab token
+  # Secret must have key 'token'
+  existingSecret: ""
+
+# Temporal workflow engine
+temporal:
+  # Deploy Temporal as a dependency
+  enabled: true
+  # External Temporal host (if enabled=false)
+  externalHost: ""
+  # Temporal namespace
+  namespace: "default"
+
+# Logging configuration
+logging:
+  level: "info"      # debug, info, warn, error
+  format: "json"     # text, json
+  output: "stdout"   # stdout, stderr
+
+# Server component configuration
+server:
+  # Service type
+  service:
+    type: ClusterIP
+    port: 8080
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # Health check configuration
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  # Node selector
+  nodeSelector: {}
+  # Tolerations
+  tolerations: []
+  # Affinity rules
+  affinity: {}
+
+# Worker component configuration
+worker:
+  # Resource limits
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  # Node selector
+  nodeSelector: {}
+  # Tolerations
+  tolerations: []
+  # Affinity rules
+  affinity: {}
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: code-reviewer.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: code-reviewer-tls
+  #    hosts:
+  #      - code-reviewer.local
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# Knowledge store persistence (for framework indexing)
+knowledge:
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce

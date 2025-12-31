@@ -1,0 +1,35 @@
+{{- if .Values.knowledge.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "code-reviewer.fullname" . }}-knowledge
+  labels:
+    {{- include "code-reviewer.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.knowledge.persistence.accessModes | nindent 4 }}
+  {{- if .Values.knowledge.persistence.storageClass }}
+  storageClassName: {{ .Values.knowledge.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.knowledge.persistence.size | quote }}
+{{- end }}
+---
+{{- if and .Values.ollama.enabled .Values.ollama.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "code-reviewer.fullname" . }}-ollama
+  labels:
+    {{- include "code-reviewer.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.ollama.persistence.storageClass }}
+  storageClassName: {{ .Values.ollama.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.ollama.persistence.size | quote }}
+{{- end }}

@@ -1,0 +1,22 @@
+apiVersion: v2
+name: code-reviewer
+description: AI-powered code review system using DeepSeek LLM with Temporal workflow orchestration
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - code-review
+  - ai
+  - llm
+  - deepseek
+  - temporal
+  - gitlab
+home: https://github.com/yourorg/code-reviewer
+maintainers:
+  - name: Your Organization
+    email: devops@yourorg.com
+dependencies:
+  - name: temporal
+    version: "0.33.0"
+    repository: https://charts.temporal.io
+    condition: temporal.enabled

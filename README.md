@@ -88,6 +88,110 @@ go build -o bin/ ./cmd/...
 go test ./...
 ```
 
+## Quick Start with Docker Compose
+
+The fastest way to run the entire stack locally:
+
+```bash
+# Start all services (Temporal, Ollama, ChromaDB, Server, Worker)
+docker-compose up -d
+
+# Pull the DeepSeek model (first time only)
+docker-compose exec ollama ollama pull deepseek-coder:6.7b
+
+# Check service health
+curl http://localhost:8080/health
+
+# View Temporal UI
+open http://localhost:8088
+
+# View logs
+docker-compose logs -f server worker
+
+# Stop all services
+docker-compose down
+```
+
+### Services Started by Docker Compose
+
+| Service | Port | Description |
+|---------|------|-------------|
+| `server` | 8080 | HTTP API and GitLab webhook server |
+| `worker` | - | Temporal worker for processing reviews |
+| `temporal` | 7233 | Temporal workflow engine |
+| `temporal-ui` | 8088 | Temporal web dashboard |
+| `ollama` | 11434 | Local LLM server |
+| `chromadb` | 8000 | Vector database for RAG |
+| `postgres` | 5432 | Database for Temporal |
+
+### Environment Variables for Docker Compose
+
+Create a `.env` file for GitLab integration:
+
+```bash
+# .env
+GITLAB_URL=https://gitlab.yourcompany.com
+GITLAB_TOKEN=your-gitlab-token
+```
+
+## Makefile Commands
+
+Use the Makefile for common operations:
+
+```bash
+# Build server and worker binaries (with version info)
+make build
+
+# Run all tests
+make test
+
+# Run tests with coverage report
+make test-coverage
+
+# Run server locally
+make run-server
+
+# Run worker locally
+make run-worker
+
+# Format code
+make fmt
+
+# Run linter (requires golangci-lint)
+make lint
+
+# Check for vulnerabilities (requires govulncheck)
+make vuln
+
+# Build Docker image
+make docker
+
+# Clean build artifacts
+make clean
+
+# Show all available commands
+make help
+```
+
+### Build with Version Info
+
+The Makefile automatically injects version information:
+
+```bash
+make build
+./bin/server &
+curl http://localhost:8080/health | jq
+# {
+#   "status": "ok",
+#   "version": "v1.0.0",
+#   "build_time": "2024-01-15_10:30:45",
+#   "git_commit": "abc123",
+#   "uptime": "5s",
+#   "go_version": "go1.21.0",
+#   "services": {"llm": "healthy", "gitlab": "configured"}
+# }
+```
+
 ## Usage
 
 ### 1. Direct Code Review (No Temporal)
@@ -450,6 +554,122 @@ Check:
 2. Token has permission to comment on the project
 3. Project ID and MR IID are correct
 4. Check logs for specific errors (`-log-level debug`)
+
+## Kubernetes Deployment with Helm
+
+Deploy to Kubernetes using the included Helm chart:
+
+```bash
+# Add Temporal Helm repo (dependency)
+helm repo add temporal https://charts.temporal.io
+helm repo update
+
+# Install with default values
+helm install code-reviewer ./helm/code-reviewer
+
+# Install with custom values
+helm install code-reviewer ./helm/code-reviewer \
+  --set gitlab.url=https://gitlab.yourcompany.com \
+  --set gitlab.token=your-token \
+  --set ollama.model=deepseek-coder:6.7b
+
+# Install with values file
+helm install code-reviewer ./helm/code-reviewer -f my-values.yaml
+
+# Upgrade existing installation
+helm upgrade code-reviewer ./helm/code-reviewer
+
+# Uninstall
+helm uninstall code-reviewer
+```
+
+### Helm Values
+
+Key configuration options:
+
+```yaml
+# values.yaml
+replicaCount:
+  server: 2
+  worker: 3
+
+image:
+  repository: code-reviewer
+  tag: latest
+  pullPolicy: IfNotPresent
+
+ollama:
+  enabled: true
+  model: deepseek-coder:6.7b
+  externalUrl: ""  # Use if Ollama is external
+
+gitlab:
+  url: ""
+  token: ""
+  existingSecret: ""  # Use existing secret for token
+
+temporal:
+  enabled: true
+  externalHost: ""  # Use if Temporal is external
+
+resources:
+  server:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  worker:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: code-reviewer.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+```
+
+### Using External Services
+
+If you have existing Temporal or Ollama instances:
+
+```bash
+helm install code-reviewer ./helm/code-reviewer \
+  --set temporal.enabled=false \
+  --set temporal.externalHost=temporal.default.svc:7233 \
+  --set ollama.enabled=false \
+  --set ollama.externalUrl=http://ollama.default.svc:11434
+```
+
+### GitLab Token Secret
+
+For production, use a Kubernetes secret:
+
+```bash
+# Create secret
+kubectl create secret generic gitlab-credentials \
+  --from-literal=token=your-gitlab-token
+
+# Reference in Helm
+helm install code-reviewer ./helm/code-reviewer \
+  --set gitlab.url=https://gitlab.yourcompany.com \
+  --set gitlab.existingSecret=gitlab-credentials
+```
 
 ## License
 
