@@ -1,0 +1,29 @@
+# Code Review System Configuration
+
+# DeepSeek LLM Server
+llm:
+  url: "http://localhost:8000"  # Your DeepSeek server URL
+  model: "deepseek-coder"       # Model name
+  timeout: "5m"                 # Request timeout
+
+# GitLab Configuration
+gitlab:
+  url: "https://gitlab.yourcompany.com"
+  token: "${GITLAB_TOKEN}"      # Use environment variable
+
+# Review Settings
+review:
+  # Maximum files to review in a single MR
+  max_files: 50
+
+  # File patterns to skip
+  skip_patterns:
+    - "*.md"
+    - "*.txt"
+    - "vendor/*"
+    - "node_modules/*"
+    - "*.lock"
+    - "*.sum"
+
+  # Minimum severity to report
+  min_severity: "LOW"  # LOW, MEDIUM, HIGH, CRITICAL
