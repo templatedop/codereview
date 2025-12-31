@@ -4,10 +4,50 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/yourorg/code-reviewer/internal/llm"
 )
+
+// FlexInt handles JSON numbers that might come as string or int
+type FlexInt int
+
+func (fi *FlexInt) UnmarshalJSON(b []byte) error {
+	// Try int first
+	var i int
+	if err := json.Unmarshal(b, &i); err == nil {
+		*fi = FlexInt(i)
+		return nil
+	}
+
+	// Try string
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		// Remove any non-numeric characters
+		s = strings.TrimSpace(s)
+		if s == "" {
+			*fi = 0
+			return nil
+		}
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			// Try to extract first number
+			for _, c := range s {
+				if c >= '0' && c <= '9' {
+					i = i*10 + int(c-'0')
+				} else if i > 0 {
+					break
+				}
+			}
+		}
+		*fi = FlexInt(i)
+		return nil
+	}
+
+	*fi = 0
+	return nil
+}
 
 // LLMClient interface for LLM providers
 type LLMClient interface {
@@ -38,7 +78,7 @@ type Issue struct {
 type ReviewResult struct {
 	Issues         []Issue `json:"issues"`
 	Summary        string  `json:"summary"`
-	RiskScore      int     `json:"risk_score"`
+	RiskScore      FlexInt `json:"risk_score"`
 	Recommendation string  `json:"recommendation"`
 }
 
@@ -79,12 +119,91 @@ func parseReviewResponse(response string) (*ReviewResult, error) {
 	response = strings.TrimSuffix(response, "```")
 	response = strings.TrimSpace(response)
 
+	// Remove JavaScript-style comments that LLMs sometimes add
+	response = removeJSONComments(response)
+
 	var result ReviewResult
 	if err := json.Unmarshal([]byte(response), &result); err != nil {
 		return nil, fmt.Errorf("json unmarshal: %w (response: %s)", err, response)
 	}
 
 	return &result, nil
+}
+
+// removeJSONComments strips // and /* */ style comments from JSON
+func removeJSONComments(s string) string {
+	var result strings.Builder
+	inString := false
+	inLineComment := false
+	inBlockComment := false
+	i := 0
+
+	for i < len(s) {
+		// Handle string literals (don't strip comments inside strings)
+		if !inLineComment && !inBlockComment && s[i] == '"' {
+			// Check if escaped
+			escaped := false
+			j := i - 1
+			for j >= 0 && s[j] == '\\' {
+				escaped = !escaped
+				j--
+			}
+			if !escaped {
+				inString = !inString
+			}
+			result.WriteByte(s[i])
+			i++
+			continue
+		}
+
+		// Inside a string, just copy
+		if inString {
+			result.WriteByte(s[i])
+			i++
+			continue
+		}
+
+		// Check for line comment start
+		if !inBlockComment && i+1 < len(s) && s[i] == '/' && s[i+1] == '/' {
+			inLineComment = true
+			i += 2
+			continue
+		}
+
+		// Check for block comment start
+		if !inLineComment && i+1 < len(s) && s[i] == '/' && s[i+1] == '*' {
+			inBlockComment = true
+			i += 2
+			continue
+		}
+
+		// Check for line comment end
+		if inLineComment && s[i] == '\n' {
+			inLineComment = false
+			result.WriteByte(s[i])
+			i++
+			continue
+		}
+
+		// Check for block comment end
+		if inBlockComment && i+1 < len(s) && s[i] == '*' && s[i+1] == '/' {
+			inBlockComment = false
+			i += 2
+			continue
+		}
+
+		// Skip comment content
+		if inLineComment || inBlockComment {
+			i++
+			continue
+		}
+
+		// Normal character
+		result.WriteByte(s[i])
+		i++
+	}
+
+	return result.String()
 }
 
 // detectLanguage determines the programming language from the file path
