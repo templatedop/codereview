@@ -1,0 +1,24 @@
+apiVersion: v2
+name: code-reviewer
+description: AI-powered PostgreSQL code review system with RAG and Temporal workflows
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - code-review
+  - postgresql
+  - ai
+  - temporal
+  - rag
+maintainers:
+  - name: Platform Team
+    email: platform@yourorg.com
+sources:
+  - https://github.com/yourorg/code-reviewer
+home: https://github.com/yourorg/code-reviewer
+icon: https://raw.githubusercontent.com/yourorg/code-reviewer/main/docs/icon.png
+dependencies:
+  - name: temporal
+    version: "0.38.0"
+    repository: https://charts.temporal.io
+    condition: temporal.enabled

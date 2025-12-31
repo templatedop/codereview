@@ -1,0 +1,71 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named {{ .Release.Name }}.
+
+== Getting Started ==
+
+1. Get the application URL:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+  {{- range .paths }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
+  {{- end }}
+{{- end }}
+{{- else if contains "NodePort" .Values.service.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "code-reviewer.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "LoadBalancer" .Values.service.type }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  You can watch the status by running:
+    kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "code-reviewer.fullname" . }}
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "code-reviewer.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+  echo http://$SERVICE_IP:{{ .Values.service.port }}
+{{- else if contains "ClusterIP" .Values.service.type }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "code-reviewer.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  echo "Visit http://127.0.0.1:{{ .Values.service.port }}"
+{{- end }}
+
+2. Health check endpoints:
+  - Liveness:  /health/live
+  - Readiness: /health/ready
+  - Startup:   /health/startup
+
+3. Metrics endpoint:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "code-reviewer.fullname" . }} {{ .Values.service.metricsPort }}:{{ .Values.service.metricsPort }}
+  curl http://127.0.0.1:{{ .Values.service.metricsPort }}{{ .Values.config.metrics.path }}
+
+== Configuration ==
+
+The application is configured via environment variables from:
+  - ConfigMap: {{ include "code-reviewer.configmapName" . }}
+  - Secret: {{ include "code-reviewer.secretName" . }}
+
+Key settings:
+  - Temporal Host: {{ .Values.config.temporal.host }}
+  - LLM Provider: {{ .Values.config.llm.provider }}
+  - LLM Model: {{ .Values.config.llm.model }}
+  - GitLab Integration: {{ if .Values.config.gitlab.enabled }}Enabled{{ else }}Disabled{{ end }}
+  - Tracing: {{ if .Values.config.tracing.enabled }}Enabled ({{ .Values.config.tracing.provider }}){{ else }}Disabled{{ end }}
+
+== Next Steps ==
+
+{{- if not .Values.secrets.gitlabToken }}
+{{- if .Values.config.gitlab.enabled }}
+
+WARNING: GitLab integration is enabled but no token is configured.
+Please set the GITLAB_TOKEN secret:
+  kubectl create secret generic {{ include "code-reviewer.secretName" . }} \
+    --namespace {{ .Release.Namespace }} \
+    --from-literal=GITLAB_TOKEN=your-token
+{{- end }}
+{{- end }}
+
+{{- if .Values.config.tracing.enabled }}
+
+Tracing is enabled. Make sure your collector is running at:
+  {{ .Values.config.tracing.endpoint }}
+{{- end }}
+
+For more information, visit:
+  https://github.com/yourorg/code-reviewer

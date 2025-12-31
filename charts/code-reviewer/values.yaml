@@ -1,0 +1,289 @@
+# Default values for code-reviewer
+# This is a YAML-formatted file.
+
+# Number of replicas
+replicaCount: 2
+
+image:
+  repository: yourorg/code-reviewer
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Service account configuration
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use
+  name: ""
+
+# Pod annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9090
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: code-reviewer.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+    # - secretName: code-reviewer-tls
+    #   hosts:
+    #     - code-reviewer.local
+
+# Resource limits
+resources:
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - code-reviewer
+          topologyKey: kubernetes.io/hostname
+
+# Persistence for vector store
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  annotations: {}
+
+# Probes configuration
+probes:
+  liveness:
+    enabled: true
+    path: /health/live
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    path: /health/ready
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  startup:
+    enabled: true
+    path: /health/startup
+    initialDelaySeconds: 0
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 30
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# Service Monitor for Prometheus Operator
+serviceMonitor:
+  enabled: false
+  namespace: ""
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+
+# Application configuration
+config:
+  # Service identification
+  serviceName: code-reviewer
+  environment: production
+
+  # Server settings
+  server:
+    host: "0.0.0.0"
+    port: 8080
+    readTimeout: "30s"
+    writeTimeout: "10m"
+    shutdownTimeout: "30s"
+
+  # Temporal settings
+  temporal:
+    host: "temporal-frontend:7233"
+    namespace: "default"
+    taskQueue: "code-review-queue"
+    workflowTimeout: "30m"
+    activityTimeout: "5m"
+    retryMaxAttempts: 3
+
+  # LLM settings
+  llm:
+    provider: "ollama"
+    baseUrl: "http://ollama:11434"
+    model: "qwen2.5-coder:32b"
+    timeout: "5m"
+    maxTokens: 4096
+    temperature: 0.1
+    requestsPerMinute: 60
+
+  # Embedder settings
+  embedder:
+    provider: "ollama"
+    baseUrl: "http://ollama:11434"
+    model: "nomic-embed-text"
+    dimension: 768
+    timeout: "60s"
+    batchSize: 32
+    cacheEnabled: true
+    cacheMaxSize: 10000
+    cacheTtl: "24h"
+
+  # RAG settings
+  rag:
+    chunkSize: 500
+    chunkOverlap: 50
+    minChunkSize: 100
+    defaultTopK: 5
+    minSimilarity: 0.5
+    maxContextLength: 8000
+
+  # Vector store settings
+  vectorStore:
+    type: "memory"
+    storePath: "/app/data/vectorstore.json"
+
+  # Database Lab settings (optional)
+  databaseLab:
+    enabled: false
+    timeout: "60s"
+    seqScanRowThreshold: 10000
+
+  # Analysis settings
+  analysis:
+    minSeverity: "low"
+    maxFileSize: 1048576
+    minContentLength: 50
+    enablePerformance: true
+    enableSecurity: true
+    enableStandards: true
+
+  # Logging settings
+  logging:
+    level: "info"
+    format: "json"
+    output: "stdout"
+    addSource: false
+
+  # Metrics settings
+  metrics:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+    namespace: "code_reviewer"
+
+  # GitLab integration
+  gitlab:
+    enabled: false
+    timeout: "30s"
+    postSummary: true
+    postInlineComments: true
+    minSeverity: "low"
+    collapseThreshold: 20
+    dryRun: false
+
+  # Tracing settings
+  tracing:
+    enabled: false
+    provider: "otlp"
+    endpoint: "jaeger-collector:4317"
+    sampleRate: 1.0
+    insecure: true
+    batchTimeout: "5s"
+
+# Secrets - provide via external secrets manager or sealed secrets
+secrets:
+  # LLM API key (for OpenAI/Anthropic)
+  llmApiKey: ""
+  # Embedder API key
+  embedderApiKey: ""
+  # GitLab token
+  gitlabToken: ""
+  # Database Lab token
+  databaseLabToken: ""
+  databaseLabVerifyToken: ""
+
+# External secrets configuration (for external-secrets operator)
+externalSecrets:
+  enabled: false
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  refreshInterval: "1h"
+  data: []
+    # - secretKey: gitlab-token
+    #   remoteRef:
+    #     key: code-reviewer/gitlab
+    #     property: token
+
+# Temporal subchart configuration
+temporal:
+  enabled: false
+  # See temporal chart values for configuration

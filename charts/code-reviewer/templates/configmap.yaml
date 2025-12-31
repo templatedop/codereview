@@ -1,0 +1,106 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "code-reviewer.configmapName" . }}
+  labels:
+    {{- include "code-reviewer.labels" . | nindent 4 }}
+data:
+  # Service identification
+  SERVICE_NAME: {{ .Values.config.serviceName | quote }}
+  ENVIRONMENT: {{ .Values.config.environment | quote }}
+
+  # Server settings
+  SERVER_HOST: {{ .Values.config.server.host | quote }}
+  SERVER_PORT: {{ .Values.config.server.port | quote }}
+  SERVER_READ_TIMEOUT: {{ .Values.config.server.readTimeout | quote }}
+  SERVER_WRITE_TIMEOUT: {{ .Values.config.server.writeTimeout | quote }}
+  SERVER_SHUTDOWN_TIMEOUT: {{ .Values.config.server.shutdownTimeout | quote }}
+
+  # Temporal settings
+  TEMPORAL_HOST: {{ .Values.config.temporal.host | quote }}
+  TEMPORAL_NAMESPACE: {{ .Values.config.temporal.namespace | quote }}
+  TEMPORAL_TASK_QUEUE: {{ .Values.config.temporal.taskQueue | quote }}
+  TEMPORAL_WORKFLOW_TIMEOUT: {{ .Values.config.temporal.workflowTimeout | quote }}
+  TEMPORAL_ACTIVITY_TIMEOUT: {{ .Values.config.temporal.activityTimeout | quote }}
+  TEMPORAL_RETRY_MAX_ATTEMPTS: {{ .Values.config.temporal.retryMaxAttempts | quote }}
+
+  # LLM settings
+  LLM_PROVIDER: {{ .Values.config.llm.provider | quote }}
+  LLM_BASE_URL: {{ .Values.config.llm.baseUrl | quote }}
+  LLM_MODEL: {{ .Values.config.llm.model | quote }}
+  LLM_TIMEOUT: {{ .Values.config.llm.timeout | quote }}
+  LLM_MAX_TOKENS: {{ .Values.config.llm.maxTokens | quote }}
+  LLM_TEMPERATURE: {{ .Values.config.llm.temperature | quote }}
+  LLM_REQUESTS_PER_MINUTE: {{ .Values.config.llm.requestsPerMinute | quote }}
+
+  # Embedder settings
+  EMBEDDER_PROVIDER: {{ .Values.config.embedder.provider | quote }}
+  EMBEDDER_BASE_URL: {{ .Values.config.embedder.baseUrl | quote }}
+  EMBEDDER_MODEL: {{ .Values.config.embedder.model | quote }}
+  EMBEDDER_DIMENSION: {{ .Values.config.embedder.dimension | quote }}
+  EMBEDDER_TIMEOUT: {{ .Values.config.embedder.timeout | quote }}
+  EMBEDDER_BATCH_SIZE: {{ .Values.config.embedder.batchSize | quote }}
+  EMBEDDER_CACHE_ENABLED: {{ .Values.config.embedder.cacheEnabled | quote }}
+  EMBEDDER_CACHE_MAX_SIZE: {{ .Values.config.embedder.cacheMaxSize | quote }}
+  EMBEDDER_CACHE_TTL: {{ .Values.config.embedder.cacheTtl | quote }}
+
+  # RAG settings
+  RAG_CHUNK_SIZE: {{ .Values.config.rag.chunkSize | quote }}
+  RAG_CHUNK_OVERLAP: {{ .Values.config.rag.chunkOverlap | quote }}
+  RAG_MIN_CHUNK_SIZE: {{ .Values.config.rag.minChunkSize | quote }}
+  RAG_DEFAULT_TOP_K: {{ .Values.config.rag.defaultTopK | quote }}
+  RAG_MIN_SIMILARITY: {{ .Values.config.rag.minSimilarity | quote }}
+  RAG_MAX_CONTEXT_LENGTH: {{ .Values.config.rag.maxContextLength | quote }}
+
+  # Vector store settings
+  VECTORSTORE_TYPE: {{ .Values.config.vectorStore.type | quote }}
+  VECTORSTORE_STORE_PATH: {{ .Values.config.vectorStore.storePath | quote }}
+
+  # Database Lab settings
+  DBLAB_ENABLED: {{ .Values.config.databaseLab.enabled | quote }}
+  {{- if .Values.config.databaseLab.url }}
+  DBLAB_URL: {{ .Values.config.databaseLab.url | quote }}
+  {{- end }}
+  DBLAB_TIMEOUT: {{ .Values.config.databaseLab.timeout | quote }}
+  DBLAB_SEQ_SCAN_ROW_THRESHOLD: {{ .Values.config.databaseLab.seqScanRowThreshold | quote }}
+
+  # Analysis settings
+  ANALYSIS_MIN_SEVERITY: {{ .Values.config.analysis.minSeverity | quote }}
+  ANALYSIS_MAX_FILE_SIZE: {{ .Values.config.analysis.maxFileSize | quote }}
+  ANALYSIS_MIN_CONTENT_LENGTH: {{ .Values.config.analysis.minContentLength | quote }}
+  ANALYSIS_ENABLE_PERFORMANCE: {{ .Values.config.analysis.enablePerformance | quote }}
+  ANALYSIS_ENABLE_SECURITY: {{ .Values.config.analysis.enableSecurity | quote }}
+  ANALYSIS_ENABLE_STANDARDS: {{ .Values.config.analysis.enableStandards | quote }}
+
+  # Logging settings
+  LOG_LEVEL: {{ .Values.config.logging.level | quote }}
+  LOG_FORMAT: {{ .Values.config.logging.format | quote }}
+  LOG_OUTPUT: {{ .Values.config.logging.output | quote }}
+  LOG_ADD_SOURCE: {{ .Values.config.logging.addSource | quote }}
+
+  # Metrics settings
+  METRICS_ENABLED: {{ .Values.config.metrics.enabled | quote }}
+  METRICS_PORT: {{ .Values.config.metrics.port | quote }}
+  METRICS_PATH: {{ .Values.config.metrics.path | quote }}
+  METRICS_NAMESPACE: {{ .Values.config.metrics.namespace | quote }}
+
+  # GitLab settings
+  GITLAB_ENABLED: {{ .Values.config.gitlab.enabled | quote }}
+  {{- if .Values.config.gitlab.url }}
+  GITLAB_URL: {{ .Values.config.gitlab.url | quote }}
+  {{- end }}
+  GITLAB_TIMEOUT: {{ .Values.config.gitlab.timeout | quote }}
+  GITLAB_POST_SUMMARY: {{ .Values.config.gitlab.postSummary | quote }}
+  GITLAB_POST_INLINE_COMMENTS: {{ .Values.config.gitlab.postInlineComments | quote }}
+  GITLAB_MIN_SEVERITY: {{ .Values.config.gitlab.minSeverity | quote }}
+  GITLAB_COLLAPSE_THRESHOLD: {{ .Values.config.gitlab.collapseThreshold | quote }}
+  GITLAB_DRY_RUN: {{ .Values.config.gitlab.dryRun | quote }}
+
+  # Tracing settings
+  TRACING_ENABLED: {{ .Values.config.tracing.enabled | quote }}
+  TRACING_PROVIDER: {{ .Values.config.tracing.provider | quote }}
+  TRACING_ENDPOINT: {{ .Values.config.tracing.endpoint | quote }}
+  TRACING_SERVICE_NAME: {{ .Values.config.serviceName | quote }}
+  TRACING_SAMPLE_RATE: {{ .Values.config.tracing.sampleRate | quote }}
+  TRACING_INSECURE: {{ .Values.config.tracing.insecure | quote }}
+  TRACING_BATCH_TIMEOUT: {{ .Values.config.tracing.batchTimeout | quote }}
