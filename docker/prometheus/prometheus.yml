@@ -1,0 +1,23 @@
+# Prometheus configuration for code-reviewer
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Code Reviewer metrics
+  - job_name: 'code-reviewer'
+    static_configs:
+      - targets: ['code-reviewer:9090']
+    metrics_path: /metrics
+
+  # Temporal metrics
+  - job_name: 'temporal'
+    static_configs:
+      - targets: ['temporal:7233']
+    metrics_path: /metrics
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
