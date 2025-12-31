@@ -229,6 +229,76 @@ func (c *Client) CreateDiscussion(ctx context.Context, projectID int, mrIID int,
 	return &discussion, nil
 }
 
+// MRVersion represents merge request version info for positioning
+type MRVersion struct {
+	ID             int    `json:"id"`
+	HeadCommitSHA  string `json:"head_commit_sha"`
+	BaseCommitSHA  string `json:"base_commit_sha"`
+	StartCommitSHA string `json:"start_commit_sha"`
+}
+
+// GetMRVersions fetches the versions of a merge request
+func (c *Client) GetMRVersions(ctx context.Context, projectID int, mrIID int) ([]MRVersion, error) {
+	url := fmt.Sprintf("%s/api/v4/projects/%d/merge_requests/%d/versions", c.baseURL, projectID, mrIID)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("PRIVATE-TOKEN", c.token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("do request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("gitlab error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var versions []MRVersion
+	if err := json.NewDecoder(resp.Body).Decode(&versions); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return versions, nil
+}
+
+// CreateLineComment creates a comment on a specific line of a file in an MR
+func (c *Client) CreateLineComment(ctx context.Context, projectID, mrIID int, filePath string, line int, body string) (*Discussion, error) {
+	// Get MR versions for positioning
+	versions, err := c.GetMRVersions(ctx, projectID, mrIID)
+	if err != nil || len(versions) == 0 {
+		// Fall back to general comment if we can't get versions
+		_, err := c.CreateMRNote(ctx, projectID, mrIID, fmt.Sprintf("**%s:%d**\n\n%s", filePath, line, body))
+		if err != nil {
+			return nil, err
+		}
+		return &Discussion{}, nil
+	}
+
+	latestVersion := versions[0]
+
+	position := &DiscussionPosition{
+		BaseSHA:      latestVersion.BaseCommitSHA,
+		StartSHA:     latestVersion.StartCommitSHA,
+		HeadSHA:      latestVersion.HeadCommitSHA,
+		PositionType: "text",
+		NewPath:      filePath,
+		NewLine:      line,
+	}
+
+	return c.CreateDiscussion(ctx, projectID, mrIID, body, position)
+}
+
+// PostReviewSummary posts the overall review summary as a note
+func (c *Client) PostReviewSummary(ctx context.Context, projectID, mrIID int, summary string) error {
+	_, err := c.CreateMRNote(ctx, projectID, mrIID, summary)
+	return err
+}
+
 // GetFileContent fetches the content of a file from the repository
 func (c *Client) GetFileContent(ctx context.Context, projectID int, filePath string, ref string) (string, error) {
 	url := fmt.Sprintf("%s/api/v4/projects/%d/repository/files/%s/raw?ref=%s",

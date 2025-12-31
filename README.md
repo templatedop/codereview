@@ -1,6 +1,6 @@
 # On-Premise Code Review System
 
-An AI-powered code review system using DeepSeek LLM with Temporal workflow orchestration and agentic capabilities.
+An AI-powered code review system using DeepSeek LLM with Temporal workflow orchestration, GitLab integration, and agentic capabilities.
 
 ## Architecture
 
@@ -19,7 +19,22 @@ An AI-powered code review system using DeepSeek LLM with Temporal workflow orche
                                                 │   DeepSeek LLM  │
                                                 │   (via Ollama)  │
                                                 └─────────────────┘
+                                                         │
+                                                         ▼
+                                                ┌─────────────────┐
+                                                │     GitLab      │
+                                                │  (Post Reviews) │
+                                                └─────────────────┘
 ```
+
+## Features
+
+- **AI-Powered Reviews**: Uses DeepSeek LLM for intelligent code analysis
+- **GitLab Integration**: Automatically post reviews to merge requests
+- **Framework-Aware**: Index your codebase for context-aware reviews
+- **Agentic Mode**: Multi-step reasoning with specialized tools
+- **Configurable Logging**: Multiple log levels, formats, and outputs
+- **Graceful Shutdown**: Clean shutdown handling for all services
 
 ## Components
 
@@ -36,6 +51,7 @@ An AI-powered code review system using DeepSeek LLM with Temporal workflow orche
 - **Go 1.21+**
 - **Ollama** with DeepSeek model installed
 - **Temporal** (optional, for workflow orchestration)
+- **GitLab** (optional, for MR integration)
 
 ### Install Ollama and DeepSeek
 
@@ -67,6 +83,9 @@ cd code-reviewer
 
 # Build all binaries
 go build -o bin/ ./cmd/...
+
+# Run tests
+go test ./...
 ```
 
 ## Usage
@@ -84,6 +103,9 @@ The simplest way to review code:
 
 # With framework context (after indexing)
 ./bin/reviewer -file code.go -framework gin
+
+# With debug logging
+./bin/reviewer -file code.go -log-level debug
 ```
 
 ### 2. Index a Framework (RAG)
@@ -109,8 +131,14 @@ Index a GitHub repository to provide framework-aware reviews:
 For production use with workflow orchestration:
 
 ```bash
-# Terminal 1: Start the worker
-./bin/worker -ollama http://localhost:11434 -model deepseek-coder:1.3b
+# Terminal 1: Start the worker with GitLab integration
+./bin/worker \
+  -llm-url http://localhost:11434 \
+  -model deepseek-coder:1.3b \
+  -gitlab-url https://gitlab.yourcompany.com \
+  -gitlab-token YOUR_TOKEN \
+  -log-level info \
+  -log-format json
 
 # Terminal 2: Trigger a review
 ./bin/trigger -file path/to/code.go
@@ -124,14 +152,48 @@ For production use with workflow orchestration:
 
 ### 4. GitLab Integration
 
-For automated MR reviews via webhooks:
+#### Via Webhooks (Automatic MR Reviews)
 
 ```bash
 # Start the webhook server
-./bin/server -port 8080 -gitlab-token YOUR_TOKEN
+./bin/server \
+  -addr :8080 \
+  -gitlab-url https://gitlab.yourcompany.com \
+  -gitlab-token YOUR_TOKEN \
+  -log-level info
 
-# Configure GitLab webhook to POST to:
-# http://your-server:8080/webhook
+# Configure GitLab webhook:
+# 1. Go to Project > Settings > Webhooks
+# 2. URL: http://your-server:8080/webhook
+# 3. Trigger: Merge request events
+```
+
+#### Via API (Manual Reviews with GitLab Posting)
+
+```bash
+# Review and post to GitLab MR
+curl -X POST http://localhost:8080/api/review \
+  -H "Content-Type: application/json" \
+  -d '{
+    "file_path": "main.go",
+    "diff": "+func insecure() { exec.Command(userInput) }",
+    "project_id": 123,
+    "merge_request_id": 42,
+    "post_to_mr": true
+  }'
+
+# Batch review multiple files
+curl -X POST http://localhost:8080/api/review/batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "files": [
+      {"file_path": "a.go", "diff": "+code"},
+      {"file_path": "b.go", "diff": "+more code"}
+    ],
+    "project_id": 123,
+    "merge_request_id": 42,
+    "post_to_mr": true
+  }'
 ```
 
 ## Configuration
@@ -140,36 +202,58 @@ For automated MR reviews via webhooks:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OLLAMA_URL` | Ollama API endpoint | `http://localhost:11434` |
+| `LLM_URL` | Ollama API endpoint | `http://localhost:11434` |
 | `LLM_MODEL` | Model to use | `deepseek-coder:1.3b` |
 | `TEMPORAL_HOST` | Temporal server address | `localhost:7233` |
-| `GITLAB_URL` | GitLab instance URL | `https://gitlab.com` |
+| `GITLAB_URL` | GitLab instance URL | - |
 | `GITLAB_TOKEN` | GitLab API token | - |
+| `LOG_LEVEL` | Log level (debug, info, warn, error) | `info` |
+| `LOG_FORMAT` | Log format (text, json) | `text` |
+| `LOG_OUTPUT` | Log output (stdout, stderr, file path) | `stdout` |
+| `KNOWLEDGE_DIR` | Directory for framework data | `~/.code-reviewer/knowledge` |
 
 ### CLI Flags
 
 **reviewer:**
 ```
--file string      Path to file to review
--model string     LLM model name (default "deepseek-coder:1.3b")
--ollama string    Ollama URL (default "http://localhost:11434")
--framework string Framework name for context-aware review
+-file string        Path to file to review
+-model string       LLM model name (default "deepseek-coder:1.3b")
+-ollama string      Ollama URL (default "http://localhost:11434")
+-framework string   Framework name for context-aware review
+-log-level string   Log level: debug, info, warn, error (default "info")
 ```
 
 **worker:**
 ```
--ollama string    Ollama URL (default "http://localhost:11434")
--model string     LLM model (default "deepseek-coder:1.3b")
--temporal string  Temporal host (default "localhost:7233")
--queue string     Task queue name (default "code-review")
+-llm-url string     LLM URL (default "http://localhost:11434")
+-model string       LLM model (default "deepseek-coder:6.7b")
+-temporal string    Temporal host (default "localhost:7233")
+-gitlab-url string  GitLab server URL
+-gitlab-token string GitLab access token
+-knowledge-dir string Knowledge store directory
+-log-level string   Log level (default "info")
+-log-format string  Log format: text, json (default "text")
+-log-output string  Log output: stdout, stderr, or file path
+```
+
+**server:**
+```
+-addr string        Server address (default ":8080")
+-llm-url string     LLM URL (default "http://localhost:11434")
+-model string       LLM model (default "deepseek-coder:1.3b")
+-gitlab-url string  GitLab server URL
+-gitlab-token string GitLab access token
+-log-level string   Log level (default "info")
+-log-format string  Log format: text, json (default "text")
+-log-output string  Log output: stdout, stderr, or file path
 ```
 
 **trigger:**
 ```
--file string      Path to file to review
--framework string Framework for context
--agent            Enable agentic multi-step review
--temporal string  Temporal host (default "localhost:7233")
+-file string        Path to file to review
+-framework string   Framework for context
+-agent              Enable agentic multi-step review
+-temporal string    Temporal host (default "localhost:7233")
 ```
 
 **indexer:**
@@ -178,6 +262,48 @@ index -name string -repo string    Index a GitHub repository
 list                               List indexed frameworks
 search -name string -query string  Search indexed code
 ```
+
+## Logging
+
+The system supports configurable logging with multiple levels and output formats.
+
+### Log Levels
+
+| Level | Description |
+|-------|-------------|
+| `debug` | Verbose debugging information |
+| `info` | Normal operational messages |
+| `warn` | Warning messages |
+| `error` | Error messages |
+
+### Log Formats
+
+**Text format (default):**
+```
+2024-01-15 10:30:45 [INFO] Starting Code Review Worker...
+2024-01-15 10:30:45 [INFO] LLM: http://localhost:11434 (model: deepseek-coder:1.3b)
+```
+
+**JSON format:**
+```json
+{"time":"2024-01-15T10:30:45Z","level":"INFO","msg":"Starting Code Review Worker..."}
+{"time":"2024-01-15T10:30:45Z","level":"INFO","msg":"LLM: http://localhost:11434 (model: deepseek-coder:1.3b)"}
+```
+
+### Log to File
+
+```bash
+./bin/worker -log-output /var/log/code-reviewer/worker.log
+```
+
+## Graceful Shutdown
+
+All services support graceful shutdown:
+
+- **Worker**: Completes in-progress tasks before stopping (30s timeout)
+- **Server**: Finishes active HTTP requests before stopping (30s timeout)
+
+Send `SIGINT` (Ctrl+C) or `SIGTERM` to trigger graceful shutdown.
 
 ## Agent Tools
 
@@ -193,6 +319,39 @@ When using `-agent` mode, the system uses a multi-step reasoning approach with t
 
 The agent performs up to 5 reasoning steps, selecting appropriate tools based on the code being reviewed.
 
+## GitLab Review Format
+
+When posting reviews to GitLab, the system creates:
+
+1. **Summary Comment**: Overview with issue counts by severity
+2. **Inline Comments**: Comments on specific lines (when possible)
+
+Example summary posted to MR:
+
+```markdown
+## 🤖 Automated Code Review
+
+**Files Reviewed:** 3 / 3
+**Issues Found:** 5
+
+### Issues by Severity
+
+| Severity | Count |
+|----------|-------|
+| 🔴 Critical | 1 |
+| 🟠 High | 2 |
+| 🟡 Medium | 1 |
+| 🟢 Low | 1 |
+
+### Detailed Findings
+
+#### 📄 `db/query.go`
+
+- 🔴 **[SECURITY]** SQL Injection (line 42)
+  - User input directly concatenated into SQL query
+  - 💡 Use parameterized queries instead
+```
+
 ## Output Format
 
 Reviews are returned as JSON:
@@ -204,12 +363,14 @@ Reviews are returned as JSON:
       "type": "security",
       "severity": "high",
       "line": 42,
-      "message": "SQL injection vulnerability: user input directly concatenated",
+      "title": "SQL Injection",
+      "description": "User input directly concatenated into SQL query",
       "suggestion": "Use parameterized queries instead"
     }
   ],
   "summary": "Found 1 critical security issue",
-  "risk_score": 8
+  "risk_score": 8,
+  "recommendation": "Fix security issues before merging"
 }
 ```
 
@@ -231,7 +392,8 @@ Reviews are returned as JSON:
 │   ├── knowledge/     # Framework knowledge store
 │   ├── indexer/       # Go AST parser for indexing
 │   ├── github/        # GitHub repo cloning
-│   └── gitlab/        # GitLab API client
+│   ├── gitlab/        # GitLab API client & review poster
+│   └── logger/        # Configurable logging
 ├── samples/           # Sample vulnerable code for testing
 └── frameworks/        # Indexed framework data (generated)
 ```
@@ -274,6 +436,20 @@ docker ps | grep temporal
 # or start it
 docker run -d -p 7233:7233 temporalio/auto-setup:latest
 ```
+
+### GitLab authentication failed
+
+Verify your token has the required permissions:
+- `api` scope for full API access
+- Or at minimum: `read_api`, `read_repository`, `write_repository`
+
+### Reviews not posting to GitLab
+
+Check:
+1. GitLab URL and token are configured
+2. Token has permission to comment on the project
+3. Project ID and MR IID are correct
+4. Check logs for specific errors (`-log-level debug`)
 
 ## License
 
