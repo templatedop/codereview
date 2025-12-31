@@ -114,20 +114,60 @@ func (a *Analyzer) ReviewDiff(ctx context.Context, filePath, diff, fullContent s
 func parseReviewResponse(response string) (*ReviewResult, error) {
 	// Clean up response - LLM might wrap in markdown
 	response = strings.TrimSpace(response)
-	response = strings.TrimPrefix(response, "```json")
-	response = strings.TrimPrefix(response, "```")
-	response = strings.TrimSuffix(response, "```")
-	response = strings.TrimSpace(response)
+
+	// Extract JSON object from response (handles extra text before/after)
+	jsonStr := extractJSON(response)
+	if jsonStr == "" {
+		return nil, fmt.Errorf("no JSON found in response: %s", response)
+	}
 
 	// Remove JavaScript-style comments that LLMs sometimes add
-	response = removeJSONComments(response)
+	jsonStr = removeJSONComments(jsonStr)
 
 	var result ReviewResult
-	if err := json.Unmarshal([]byte(response), &result); err != nil {
-		return nil, fmt.Errorf("json unmarshal: %w (response: %s)", err, response)
+	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+		return nil, fmt.Errorf("json unmarshal: %w (response: %s)", err, jsonStr)
 	}
 
 	return &result, nil
+}
+
+// extractJSON finds and extracts a JSON object from text
+func extractJSON(s string) string {
+	// Find first {
+	start := strings.Index(s, "{")
+	if start == -1 {
+		return ""
+	}
+
+	// Find matching closing brace
+	depth := 0
+	inString := false
+	for i := start; i < len(s); i++ {
+		c := s[i]
+
+		// Handle string literals
+		if c == '"' && (i == 0 || s[i-1] != '\\') {
+			inString = !inString
+			continue
+		}
+
+		if inString {
+			continue
+		}
+
+		if c == '{' {
+			depth++
+		} else if c == '}' {
+			depth--
+			if depth == 0 {
+				return s[start : i+1]
+			}
+		}
+	}
+
+	// No matching brace found, return from start to end
+	return s[start:]
 }
 
 // removeJSONComments strips // and /* */ style comments from JSON
