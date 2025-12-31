@@ -110,6 +110,51 @@ func (a *Analyzer) ReviewDiff(ctx context.Context, filePath, diff, fullContent s
 	return result, nil
 }
 
+// FrameworkContext represents framework code relevant to the review
+type FrameworkContext struct {
+	Name     string
+	Elements []llm.FrameworkElement
+}
+
+// ReviewDiffWithFramework analyzes code with framework context
+func (a *Analyzer) ReviewDiffWithFramework(ctx context.Context, filePath, diff, fullContent string, framework FrameworkContext) (*ReviewResult, error) {
+	lang := detectLanguage(filePath)
+
+	// Build system prompt with framework name
+	systemPrompt, err := llm.BuildSystemPromptWithFramework(framework.Name)
+	if err != nil {
+		return nil, fmt.Errorf("build system prompt: %w", err)
+	}
+
+	// Build user prompt with framework context
+	prompt, err := llm.BuildReviewPromptWithFramework(llm.ReviewInputWithFramework{
+		ReviewInput: llm.ReviewInput{
+			Language:    lang,
+			FilePath:    filePath,
+			Diff:        diff,
+			FullContent: fullContent,
+		},
+		FrameworkName:    framework.Name,
+		FrameworkContext: framework.Elements,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build prompt: %w", err)
+	}
+
+	response, err := a.llm.Complete(ctx, systemPrompt, prompt)
+	if err != nil {
+		return nil, fmt.Errorf("llm complete: %w", err)
+	}
+
+	// Parse JSON response
+	result, err := parseReviewResponse(response)
+	if err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	return result, nil
+}
+
 // parseReviewResponse extracts the ReviewResult from the LLM response
 func parseReviewResponse(response string) (*ReviewResult, error) {
 	// Clean up response - LLM might wrap in markdown

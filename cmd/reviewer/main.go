@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yourorg/code-reviewer/internal/knowledge"
 	"github.com/yourorg/code-reviewer/internal/llm"
 	"github.com/yourorg/code-reviewer/internal/reviewer"
 )
@@ -23,6 +24,8 @@ func main() {
 	filePath := flag.String("file", "", "File to review (can be local file or just filename with -diff)")
 	diffFile := flag.String("diff", "", "Path to diff file (optional - if not provided, reviews whole file)")
 	contextFile := flag.String("context", "", "Path to full file for additional context (optional)")
+	frameworkName := flag.String("framework", "", "Name of indexed framework to use for context-aware review")
+	dataDir := flag.String("data-dir", "", "Directory where frameworks are stored")
 	outputJSON := flag.Bool("json", false, "Output raw JSON only")
 	timeout := flag.Duration("timeout", 5*time.Minute, "Request timeout")
 	flag.Parse()
@@ -39,10 +42,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "  code-reviewer [flags] <file>")
 		fmt.Fprintln(os.Stderr, "  code-reviewer -file <file>")
 		fmt.Fprintln(os.Stderr, "  code-reviewer -file <file> -diff <diff-file>")
+		fmt.Fprintln(os.Stderr, "  code-reviewer -framework <name> <file>   # Framework-aware review")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Examples:")
-		fmt.Fprintln(os.Stderr, "  code-reviewer mycode.go              # Review entire file")
-		fmt.Fprintln(os.Stderr, "  code-reviewer -file src/handler.go   # Review entire file")
+		fmt.Fprintln(os.Stderr, "  code-reviewer mycode.go                          # Review entire file")
+		fmt.Fprintln(os.Stderr, "  code-reviewer -framework gin handler.go          # Review with Gin framework context")
+		fmt.Fprintln(os.Stderr, "  code-reviewer -file src/handler.go               # Review entire file")
 		fmt.Fprintln(os.Stderr, "  code-reviewer -file main.go -diff changes.patch")
 		fmt.Fprintln(os.Stderr, "")
 		flag.Usage()
@@ -113,6 +118,38 @@ func main() {
 		}
 	}
 
+	// Load framework if specified
+	var frameworkCtx *reviewer.FrameworkContext
+	if *frameworkName != "" {
+		store := knowledge.NewStore(*dataDir)
+		framework, err := store.LoadFramework(*frameworkName)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading framework '%s': %v\n", *frameworkName, err)
+			fmt.Fprintln(os.Stderr, "Use 'indexer list' to see available frameworks.")
+			os.Exit(1)
+		}
+
+		// Search for relevant framework code based on the diff content
+		relevantElements := store.Search(diff+" "+fullContent, 5)
+
+		// Convert to framework context
+		var elements []llm.FrameworkElement
+		for _, elem := range relevantElements {
+			elements = append(elements, llm.FrameworkElement{
+				Type:    elem.Type,
+				Package: elem.Package,
+				Name:    elem.Name,
+				Doc:     elem.Doc,
+				Body:    truncateBody(elem.Body, 500), // Limit body size
+			})
+		}
+
+		frameworkCtx = &reviewer.FrameworkContext{
+			Name:     framework.Name,
+			Elements: elements,
+		}
+	}
+
 	// Initialize client based on backend type
 	var client reviewer.LLMClient
 	if *useOllama {
@@ -146,9 +183,21 @@ func main() {
 		}
 		fmt.Fprintf(os.Stderr, "Analyzing %s (%s)...\n", *filePath, reviewType)
 		fmt.Fprintf(os.Stderr, "LLM Server: %s (model: %s, backend: %s)\n", *llmURL, *model, backend)
+		if frameworkCtx != nil {
+			fmt.Fprintf(os.Stderr, "Framework: %s (%d relevant patterns loaded)\n",
+				frameworkCtx.Name, len(frameworkCtx.Elements))
+		}
 	}
 
-	result, err := analyzer.ReviewDiff(ctx, *filePath, diff, fullContent)
+	var result *reviewer.ReviewResult
+	var err error
+
+	if frameworkCtx != nil {
+		result, err = analyzer.ReviewDiffWithFramework(ctx, *filePath, diff, fullContent, *frameworkCtx)
+	} else {
+		result, err = analyzer.ReviewDiff(ctx, *filePath, diff, fullContent)
+	}
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -189,6 +238,14 @@ func createSyntheticDiff(filePath, content string) string {
 	}
 
 	return sb.String()
+}
+
+// truncateBody limits the size of code body for prompt
+func truncateBody(body string, maxLen int) string {
+	if len(body) <= maxLen {
+		return body
+	}
+	return body[:maxLen] + "\n// ... truncated"
 }
 
 func printSummary(result *reviewer.ReviewResult) {
