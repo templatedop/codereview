@@ -16,8 +16,9 @@ import (
 
 func main() {
 	// Flags
-	llmURL := flag.String("llm-url", getEnv("LLM_URL", "http://localhost:8000"), "DeepSeek server URL")
-	model := flag.String("model", getEnv("LLM_MODEL", "deepseek-coder"), "Model name")
+	llmURL := flag.String("llm-url", getEnv("LLM_URL", "http://localhost:11434"), "LLM server URL")
+	model := flag.String("model", getEnv("LLM_MODEL", "deepseek-coder:6.7b"), "Model name")
+	useOllama := flag.Bool("ollama", getEnvBool("USE_OLLAMA", true), "Use Ollama API (default: true)")
 	filePath := flag.String("file", "", "File path being reviewed")
 	diffFile := flag.String("diff", "", "Path to diff file (or use stdin)")
 	contextFile := flag.String("context", "", "Path to full file for additional context (optional)")
@@ -70,12 +71,21 @@ func main() {
 		}
 	}
 
-	// Initialize client
-	client := llm.NewClient(llm.Config{
-		BaseURL: *llmURL,
-		Model:   *model,
-		Timeout: *timeout,
-	})
+	// Initialize client based on backend type
+	var client reviewer.LLMClient
+	if *useOllama {
+		client = llm.NewOllamaClient(llm.Config{
+			BaseURL: *llmURL,
+			Model:   *model,
+			Timeout: *timeout,
+		})
+	} else {
+		client = llm.NewClient(llm.Config{
+			BaseURL: *llmURL,
+			Model:   *model,
+			Timeout: *timeout,
+		})
+	}
 
 	analyzer := reviewer.NewAnalyzer(client)
 
@@ -84,8 +94,12 @@ func main() {
 	defer cancel()
 
 	if !*outputJSON {
+		backend := "OpenAI-compatible"
+		if *useOllama {
+			backend = "Ollama"
+		}
 		fmt.Fprintf(os.Stderr, "Analyzing %s...\n", *filePath)
-		fmt.Fprintf(os.Stderr, "LLM Server: %s (model: %s)\n", *llmURL, *model)
+		fmt.Fprintf(os.Stderr, "LLM Server: %s (model: %s, backend: %s)\n", *llmURL, *model, backend)
 	}
 
 	result, err := analyzer.ReviewDiff(ctx, *filePath, diff, fullContent)
@@ -152,4 +166,12 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	return v == "true" || v == "1" || v == "yes"
 }

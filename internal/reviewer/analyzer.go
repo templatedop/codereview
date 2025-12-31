@@ -9,13 +9,18 @@ import (
 	"github.com/yourorg/code-reviewer/internal/llm"
 )
 
+// LLMClient interface for LLM providers
+type LLMClient interface {
+	Complete(ctx context.Context, systemPrompt, userPrompt string) (string, error)
+}
+
 // Analyzer performs code review analysis using the LLM
 type Analyzer struct {
-	llm *llm.Client
+	llm LLMClient
 }
 
 // NewAnalyzer creates a new code review analyzer
-func NewAnalyzer(llmClient *llm.Client) *Analyzer {
+func NewAnalyzer(llmClient LLMClient) *Analyzer {
 	return &Analyzer{llm: llmClient}
 }
 
