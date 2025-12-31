@@ -408,15 +408,30 @@ func extractTables(sql string) []string {
 	var tables []string
 	seen := make(map[string]bool)
 
-	// FROM clause
-	fromRe := regexp.MustCompile(`(?i)\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*)*)`)
+	// FROM clause - match tables before WHERE, JOIN, ORDER, GROUP, HAVING, LIMIT
+	fromRe := regexp.MustCompile(`(?i)\bFROM\s+([a-zA-Z_][a-zA-Z0-9_.,\s]*)(?:\s+(?:WHERE|JOIN|LEFT|RIGHT|INNER|OUTER|CROSS|ORDER|GROUP|HAVING|LIMIT|;|$))`)
 	if matches := fromRe.FindStringSubmatch(sql); len(matches) > 1 {
-		for _, t := range strings.Split(matches[1], ",") {
-			t = strings.TrimSpace(strings.Split(t, " ")[0])
-			if t != "" && !seen[t] {
-				tables = append(tables, t)
-				seen[t] = true
+		tableList := matches[1]
+		for _, t := range strings.Split(tableList, ",") {
+			t = strings.TrimSpace(t)
+			// Remove alias (e.g., "users u" -> "users")
+			parts := strings.Fields(t)
+			if len(parts) > 0 {
+				tableName := parts[0]
+				if tableName != "" && !seen[tableName] {
+					tables = append(tables, tableName)
+					seen[tableName] = true
+				}
 			}
+		}
+	}
+
+	// Fallback: simpler FROM extraction if no keyword follows
+	if len(tables) == 0 {
+		simpleFromRe := regexp.MustCompile(`(?i)\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*)`)
+		if matches := simpleFromRe.FindStringSubmatch(sql); len(matches) > 1 && !seen[matches[1]] {
+			tables = append(tables, matches[1])
+			seen[matches[1]] = true
 		}
 	}
 
@@ -488,4 +503,19 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// IsMigrationFile checks if a file path indicates a migration file.
+func IsMigrationFile(path string) bool {
+	lower := strings.ToLower(path)
+	return strings.Contains(lower, "migration") ||
+		strings.Contains(lower, "migrate") ||
+		strings.Contains(lower, "/db/") ||
+		strings.Contains(lower, "db/") ||
+		strings.Contains(lower, "/schema/") ||
+		strings.Contains(lower, "schema/") ||
+		strings.Contains(lower, "/flyway/") ||
+		strings.Contains(lower, "flyway/") ||
+		strings.Contains(lower, "/liquibase/") ||
+		strings.Contains(lower, "liquibase/")
 }
