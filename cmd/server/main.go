@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -17,6 +18,15 @@ import (
 	"github.com/yourorg/code-reviewer/internal/logger"
 	"github.com/yourorg/code-reviewer/internal/reviewer"
 )
+
+// Build info - set via ldflags
+var (
+	Version   = "dev"
+	BuildTime = "unknown"
+	GitCommit = "unknown"
+)
+
+var startTime = time.Now()
 
 var log *logger.Logger
 
@@ -76,9 +86,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Health check
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	})
+	mux.HandleFunc("/health", handleHealth(llmClient, gitlabClient))
 
 	// Review endpoint
 	mux.HandleFunc("/api/review", handleReview(analyzer, gitlabClient))
@@ -121,6 +129,55 @@ func main() {
 
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatal("Server error: %v", err)
+	}
+}
+
+// HealthResponse contains health check information
+type HealthResponse struct {
+	Status    string            `json:"status"`
+	Version   string            `json:"version"`
+	BuildTime string            `json:"build_time"`
+	GitCommit string            `json:"git_commit"`
+	Uptime    string            `json:"uptime"`
+	GoVersion string            `json:"go_version"`
+	Services  map[string]string `json:"services"`
+}
+
+func handleHealth(llmClient llm.LLMClient, gitlabClient *gitlab.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		resp := HealthResponse{
+			Status:    "ok",
+			Version:   Version,
+			BuildTime: BuildTime,
+			GitCommit: GitCommit,
+			Uptime:    time.Since(startTime).Round(time.Second).String(),
+			GoVersion: runtime.Version(),
+			Services:  make(map[string]string),
+		}
+
+		// Check LLM connectivity (quick timeout)
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		if err := llmClient.Ping(ctx); err != nil {
+			resp.Services["llm"] = "unhealthy: " + err.Error()
+			resp.Status = "degraded"
+		} else {
+			resp.Services["llm"] = "healthy"
+		}
+
+		// Check GitLab connectivity if configured
+		if gitlabClient != nil {
+			resp.Services["gitlab"] = "configured"
+		} else {
+			resp.Services["gitlab"] = "not configured"
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if resp.Status != "ok" {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+		json.NewEncoder(w).Encode(resp)
 	}
 }
 

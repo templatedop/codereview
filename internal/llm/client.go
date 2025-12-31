@@ -10,6 +10,12 @@ import (
 	"time"
 )
 
+// LLMClient is the interface for LLM backends
+type LLMClient interface {
+	Complete(ctx context.Context, systemPrompt, userPrompt string) (string, error)
+	Ping(ctx context.Context) error
+}
+
 // Client handles communication with the DeepSeek LLM server
 type Client struct {
 	baseURL    string
@@ -131,4 +137,21 @@ func (c *Client) Complete(ctx context.Context, systemPrompt, userPrompt string) 
 	}
 
 	return resp.Choices[0].Message.Content, nil
+}
+
+// Ping checks if the LLM server is reachable
+func (c *Client) Ping(ctx context.Context) error {
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/v1/models", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+	return nil
 }

@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # Temporal server
+  temporal:
+    image: temporalio/auto-setup:1.22
+    ports:
+      - "7233:7233"
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgres
+    depends_on:
+      - postgres
+
+  # Temporal Web UI
+  temporal-ui:
+    image: temporalio/ui:2.21.0
+    ports:
+      - "8088:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    depends_on:
+      - temporal
+
+  # PostgreSQL for Temporal
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=temporal
+      - POSTGRES_PASSWORD=temporal
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Ollama for local LLM
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Pull DeepSeek model on startup (optional, can be done manually)
+    # command: ["serve"]
+
+  # ChromaDB for vector storage
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+
+  # Code Review Server
+  server:
+    build:
+      context: .
+      target: server
+    ports:
+      - "8080:8080"
+    environment:
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - GITLAB_URL=${GITLAB_URL:-}
+      - GITLAB_TOKEN=${GITLAB_TOKEN:-}
+    depends_on:
+      - temporal
+      - ollama
+
+  # Code Review Worker
+  worker:
+    build:
+      context: .
+      target: worker
+    environment:
+      - TEMPORAL_ADDR=temporal:7233
+      - LLM_ENDPOINT=http://ollama:11434
+      - LLM_MODEL=deepseek-coder:6.7b
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+    depends_on:
+      - temporal
+      - ollama
+      - chromadb
+
+volumes:
+  postgres_data:
+  ollama_data:
+  chroma_data:

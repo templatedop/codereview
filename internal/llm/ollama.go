@@ -202,3 +202,20 @@ func (c *OllamaClient) ListModels(ctx context.Context) ([]string, error) {
 
 	return models, nil
 }
+
+// Ping checks if the Ollama server is reachable
+func (c *OllamaClient) Ping(ctx context.Context) error {
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/api/tags", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+	return nil
+}
