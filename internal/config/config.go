@@ -45,6 +45,12 @@ type Config struct {
 
 	// Metrics settings
 	Metrics MetricsConfig `json:"metrics"`
+
+	// GitLab integration settings
+	GitLab GitLabConfig `json:"gitlab"`
+
+	// Tracing settings
+	Tracing TracingConfig `json:"tracing"`
 }
 
 // ServerConfig holds HTTP server configuration.
@@ -180,6 +186,30 @@ type MetricsConfig struct {
 	Namespace string `json:"namespace"`
 }
 
+// GitLabConfig holds GitLab integration configuration.
+type GitLabConfig struct {
+	Enabled            bool          `json:"enabled"`
+	BaseURL            string        `json:"base_url"`
+	Token              string        `json:"-"` // Don't serialize token
+	Timeout            time.Duration `json:"timeout"`
+	PostSummary        bool          `json:"post_summary"`
+	PostInlineComments bool          `json:"post_inline_comments"`
+	MinSeverity        string        `json:"min_severity"`
+	CollapseThreshold  int           `json:"collapse_threshold"`
+	DryRun             bool          `json:"dry_run"`
+}
+
+// TracingConfig holds distributed tracing configuration.
+type TracingConfig struct {
+	Enabled      bool    `json:"enabled"`
+	Provider     string  `json:"provider"` // otlp, jaeger, zipkin
+	Endpoint     string  `json:"endpoint"`
+	ServiceName  string  `json:"service_name"`
+	SampleRate   float64 `json:"sample_rate"` // 0.0 to 1.0
+	Insecure     bool    `json:"insecure"`    // Use insecure connection
+	BatchTimeout time.Duration `json:"batch_timeout"`
+}
+
 // DefaultConfig returns configuration with sensible defaults.
 func DefaultConfig() *Config {
 	return &Config{
@@ -280,6 +310,26 @@ func DefaultConfig() *Config {
 			Path:      "/metrics",
 			Namespace: "code_reviewer",
 		},
+
+		GitLab: GitLabConfig{
+			Enabled:            false,
+			Timeout:            30 * time.Second,
+			PostSummary:        true,
+			PostInlineComments: true,
+			MinSeverity:        "low",
+			CollapseThreshold:  20,
+			DryRun:             false,
+		},
+
+		Tracing: TracingConfig{
+			Enabled:      false,
+			Provider:     "otlp",
+			Endpoint:     "localhost:4317",
+			ServiceName:  "code-reviewer",
+			SampleRate:   1.0,
+			Insecure:     true,
+			BatchTimeout: 5 * time.Second,
+		},
 	}
 }
 
@@ -373,6 +423,26 @@ func LoadFromEnv() (*Config, error) {
 	cfg.Metrics.Path = getEnvString("METRICS_PATH", cfg.Metrics.Path)
 	cfg.Metrics.Namespace = getEnvString("METRICS_NAMESPACE", cfg.Metrics.Namespace)
 
+	// GitLab
+	cfg.GitLab.Enabled = getEnvBool("GITLAB_ENABLED", cfg.GitLab.Enabled)
+	cfg.GitLab.BaseURL = getEnvString("GITLAB_URL", cfg.GitLab.BaseURL)
+	cfg.GitLab.Token = getEnvString("GITLAB_TOKEN", cfg.GitLab.Token)
+	cfg.GitLab.Timeout = getEnvDuration("GITLAB_TIMEOUT", cfg.GitLab.Timeout)
+	cfg.GitLab.PostSummary = getEnvBool("GITLAB_POST_SUMMARY", cfg.GitLab.PostSummary)
+	cfg.GitLab.PostInlineComments = getEnvBool("GITLAB_POST_INLINE_COMMENTS", cfg.GitLab.PostInlineComments)
+	cfg.GitLab.MinSeverity = getEnvString("GITLAB_MIN_SEVERITY", cfg.GitLab.MinSeverity)
+	cfg.GitLab.CollapseThreshold = getEnvInt("GITLAB_COLLAPSE_THRESHOLD", cfg.GitLab.CollapseThreshold)
+	cfg.GitLab.DryRun = getEnvBool("GITLAB_DRY_RUN", cfg.GitLab.DryRun)
+
+	// Tracing
+	cfg.Tracing.Enabled = getEnvBool("TRACING_ENABLED", cfg.Tracing.Enabled)
+	cfg.Tracing.Provider = getEnvString("TRACING_PROVIDER", cfg.Tracing.Provider)
+	cfg.Tracing.Endpoint = getEnvString("TRACING_ENDPOINT", cfg.Tracing.Endpoint)
+	cfg.Tracing.ServiceName = getEnvString("TRACING_SERVICE_NAME", cfg.Tracing.ServiceName)
+	cfg.Tracing.SampleRate = getEnvFloat("TRACING_SAMPLE_RATE", cfg.Tracing.SampleRate)
+	cfg.Tracing.Insecure = getEnvBool("TRACING_INSECURE", cfg.Tracing.Insecure)
+	cfg.Tracing.BatchTimeout = getEnvDuration("TRACING_BATCH_TIMEOUT", cfg.Tracing.BatchTimeout)
+
 	return cfg, nil
 }
 
@@ -418,6 +488,22 @@ func (c *Config) Validate() error {
 	validLogLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
 	if !validLogLevels[strings.ToLower(c.Logging.Level)] {
 		errs = append(errs, "logging.level must be debug, info, warn, or error")
+	}
+
+	// GitLab validation
+	if c.GitLab.Enabled && c.GitLab.BaseURL == "" {
+		errs = append(errs, "gitlab.base_url is required when enabled")
+	}
+	if c.GitLab.Enabled && c.GitLab.Token == "" {
+		errs = append(errs, "gitlab.token is required when enabled")
+	}
+
+	// Tracing validation
+	if c.Tracing.Enabled && c.Tracing.Endpoint == "" {
+		errs = append(errs, "tracing.endpoint is required when enabled")
+	}
+	if c.Tracing.SampleRate < 0 || c.Tracing.SampleRate > 1 {
+		errs = append(errs, "tracing.sample_rate must be between 0 and 1")
 	}
 
 	if len(errs) > 0 {

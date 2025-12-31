@@ -46,6 +46,7 @@ type Issue struct {
 	Severity    string            `json:"severity"`
 	Category    string            `json:"category"`
 	Type        string            `json:"type,omitempty"`
+	File        string            `json:"file,omitempty"`
 	Line        int               `json:"line"`
 	EndLine     int               `json:"end_line,omitempty"`
 	Query       string            `json:"query,omitempty"`

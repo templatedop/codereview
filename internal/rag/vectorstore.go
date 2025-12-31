@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+
+	"github.com/yourorg/code-reviewer/internal/atomicfile"
 )
 
 // Document represents a document stored in the vector store.
@@ -229,7 +231,8 @@ func (s *MemoryVectorStore) saveToDisk() error {
 		if err != nil {
 			return fmt.Errorf("marshal collection %s: %w", name, err)
 		}
-		if err := os.WriteFile(path, data, 0644); err != nil {
+		// Use atomic file write to prevent data corruption
+		if err := atomicfile.WriteFile(path, data, 0644); err != nil {
 			return fmt.Errorf("write collection %s: %w", name, err)
 		}
 	}

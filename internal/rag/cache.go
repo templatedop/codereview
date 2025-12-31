@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/yourorg/code-reviewer/internal/atomicfile"
 )
 
 // CachedEmbedder wraps an Embedder with caching capabilities.
@@ -246,7 +248,8 @@ func (c *EmbeddingCache) saveToDisk() {
 		return
 	}
 
-	_ = os.WriteFile(c.storePath, data, 0644)
+	// Use atomic file write to prevent data corruption
+	_ = atomicfile.WriteFile(c.storePath, data, 0644)
 }
 
 func (c *EmbeddingCache) loadFromDisk() error {
